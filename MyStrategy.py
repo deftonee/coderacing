@@ -9,47 +9,84 @@ from model.TileType import TileType
 TURN_TILES = (TileType.LEFT_TOP_CORNER, TileType.RIGHT_TOP_CORNER, TileType.LEFT_BOTTOM_CORNER,
               TileType.RIGHT_BOTTOM_CORNER, TileType.LEFT_HEADED_T, TileType.RIGHT_HEADED_T,
               TileType.TOP_HEADED_T, TileType.BOTTOM_HEADED_T)
+DEAD_TILES = (TileType.EMPTY, TileType.UNKNOWN)
 TURN_SPEED = 10
 
 SMALL_SPEED = 0.5
 MEDIUM_SPEED = 4
 MAX_TICKS_WITHOUT_MOVE = 8
 MAX_REAR_MOVE_TICKS = 80
+LEFT = (-1, 0)
+RIGHT = (1, 0)
+UPPER = (0, -1)
+LOWER = (0, 1)
+NEIGHBOURS = (LEFT, RIGHT, UPPER, LOWER)
 
 
 class MyStrategy:
-    prev_tile_x = None
-    prev_tile_y = None
-    prev_tile_type = TileType.UNKNOWN
     rear_move_ticks_remain = 0
     ticks_without_move = 0
+    grid = [[]]
+    grid_width = 0
+    grid_height = 0
 
     @staticmethod
     def get_wheel_turn_to_waypoint(unit, x, y):
         return unit.get_angle_to(x, y) * 32.0 / pi
 
+    def steps_to_point(self, ux, uy, px, py):
+        print(ux, uy)
+        if ux == px and uy == py:
+            return [(px, py)]
+        neighbours = [(0, 0), (0, 0), (0, 0), (0, 0)]
+        lx = ux - px
+        ly = uy - py
+        if abs(lx) >= abs(ly):
+            neighbours[0], neighbours[3] = (LEFT, RIGHT) if lx < 0 else (RIGHT, LEFT)
+            neighbours[1], neighbours[2] = (UPPER, LOWER) if ly < 0 else (LOWER, UPPER)
+        else:
+            neighbours[0], neighbours[3] = (UPPER, LOWER) if ly < 0 else (LOWER, UPPER)
+            neighbours[1], neighbours[2] = (LEFT, RIGHT) if lx < 0 else (RIGHT, LEFT)
+        for neighbour in neighbours:
+            x = ux + neighbour[0]
+            y = uy + neighbour[1]
+            if not (0 <= x < self.grid_width and 0 <= y < self.grid_height) or \
+                    self.grid[x][y] not in DEAD_TILES:
+                continue
+            path = self.steps_to_point(x, y, px, py)
+            if path:
+                return [(x, y)] + path
+        return None
+
     def move(self, me: Car, world: World, game: Game, move: Move):
+        self.grid = world.tiles_x_y
+        self.grid_width = len(world.tiles_x_y[0])
+        self.grid_height = len(world.tiles_x_y)
 
         next_tile_type = world.tiles_x_y[me.next_waypoint_x][me.next_waypoint_y]
         curr_tile_x = int(me.x // game.track_tile_size + (
-            1 if me.x % game.track_tile_size > game.track_tile_size / 2 else 0))
+            -1 if me.x % game.track_tile_size == 0 else 0))
         curr_tile_y = int(me.y // game.track_tile_size + (
-            1 if me.y % game.track_tile_size > game.track_tile_size / 2 else 0))
-        if self.prev_tile_x is None and self.prev_tile_y is None:
-            self.prev_tile_x = me.next_waypoint_x
-            self.prev_tile_y = me.next_waypoint_y
-            self.prev_tile_type = next_tile_type
+            -1 if me.y % game.track_tile_size == 0 else 0))
+
 
         print('----------', world.tick)
-        # print(self.ticks_without_move, self.rear_move_ticks_remain)
-        # print(me.next_waypoint_x, me.next_waypoint_y)
+        if world.tick == 0:
+            for r in world.tiles_x_y:
+                print(r)
+        print(me.next_waypoint_x, me.next_waypoint_y, next_tile_type)
         # print(curr_tile_x, curr_tile_y)
+
+        print(self.steps_to_point(curr_tile_x, curr_tile_y, me.next_waypoint_x, me.next_waypoint_y))
+
+        # print(self.ticks_without_move, self.rear_move_ticks_remain)
+
+
         # print(me.speed_x, me.speed_y)
         # print(me.x, me.y)
 
         # до начала движения
         if world.tick < game.initial_freeze_duration_ticks:
-            print('до начала движения')
             move.engine_power = 1.0
             return
 
