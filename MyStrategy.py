@@ -14,7 +14,7 @@ TURN_SPEED = 10
 SMALL_SPEED = 0.5
 MEDIUM_SPEED = 4
 MAX_TICKS_WITHOUT_MOVE = 8
-MAX_REAR_MOVE_TICKS = 60
+MAX_REAR_MOVE_TICKS = 80
 
 
 class MyStrategy:
@@ -24,21 +24,28 @@ class MyStrategy:
     rear_move_ticks_remain = 0
     ticks_without_move = 0
 
+    @staticmethod
+    def get_wheel_turn_to_waypoint(unit, x, y):
+        return unit.get_angle_to(x, y) * 32.0 / pi
+
     def move(self, me: Car, world: World, game: Game, move: Move):
 
         next_tile_type = world.tiles_x_y[me.next_waypoint_x][me.next_waypoint_y]
-        # curr_tile_x = me.x / game.track_tile_size
-        # curr_tile_y = me.y / game.track_tile_size
+        curr_tile_x = int(me.x // game.track_tile_size + (
+            1 if me.x % game.track_tile_size > game.track_tile_size / 2 else 0))
+        curr_tile_y = int(me.y // game.track_tile_size + (
+            1 if me.y % game.track_tile_size > game.track_tile_size / 2 else 0))
         if self.prev_tile_x is None and self.prev_tile_y is None:
             self.prev_tile_x = me.next_waypoint_x
             self.prev_tile_y = me.next_waypoint_y
             self.prev_tile_type = next_tile_type
 
         print('----------', world.tick)
-        print(self.ticks_without_move, self.rear_move_ticks_remain)
-        # print(curr_tile_x, curr_tile_y)
+        # print(self.ticks_without_move, self.rear_move_ticks_remain)
         # print(me.next_waypoint_x, me.next_waypoint_y)
-        print(me.speed_x, me.speed_y)
+        # print(curr_tile_x, curr_tile_y)
+        # print(me.speed_x, me.speed_y)
+        # print(me.x, me.y)
 
         # до начала движения
         if world.tick < game.initial_freeze_duration_ticks:
@@ -49,6 +56,9 @@ class MyStrategy:
         # задний ход
         if self.rear_move_ticks_remain > 0:
             self.rear_move_ticks_remain -= 1
+            next_x = (me.next_waypoint_x + 0.5) * game.track_tile_size
+            next_y = (me.next_waypoint_y + 0.5) * game.track_tile_size
+            move.wheel_turn = -1 if self.get_wheel_turn_to_waypoint(me, next_x, next_y) > 0 else 1
             move.engine_power = -1.0
             return
 
@@ -61,6 +71,10 @@ class MyStrategy:
             self.ticks_without_move = 0
             self.rear_move_ticks_remain = MAX_REAR_MOVE_TICKS
 
+        # move.engine_power = 1.0
+        # move.use_nitro = True
+
+        # есть ли машины рядом
         cars_is_close = False
         for car in world.cars:
             if car.id != me.id and me.get_distance_to_unit(car) <= me.width:
@@ -79,33 +93,33 @@ class MyStrategy:
             ))
         )):
             move.engine_power = 1.0
-        else:
+            return
 
-            next_x = (me.next_waypoint_x + 0.5) * game.track_tile_size
-            next_y = (me.next_waypoint_y + 0.5) * game.track_tile_size
+        next_x = (me.next_waypoint_x + 0.5) * game.track_tile_size
+        next_y = (me.next_waypoint_y + 0.5) * game.track_tile_size
 
-            corner_tile_offset = 0.25 * game.track_tile_size
+        corner_tile_offset = 0.25 * game.track_tile_size
 
-            if next_tile_type == TileType.LEFT_TOP_CORNER:
-                next_x += corner_tile_offset
-                next_y += corner_tile_offset
-            elif next_tile_type == TileType.RIGHT_TOP_CORNER:
-                next_x -= corner_tile_offset
-                next_y += corner_tile_offset
-            elif next_tile_type == TileType.LEFT_BOTTOM_CORNER:
-                next_x += corner_tile_offset
-                next_y -= corner_tile_offset
-            elif next_tile_type == TileType.RIGHT_BOTTOM_CORNER:
-                next_x -= corner_tile_offset
-                next_y -= corner_tile_offset
+        if next_tile_type == TileType.LEFT_TOP_CORNER:
+            next_x += corner_tile_offset
+            next_y += corner_tile_offset
+        elif next_tile_type == TileType.RIGHT_TOP_CORNER:
+            next_x -= corner_tile_offset
+            next_y += corner_tile_offset
+        elif next_tile_type == TileType.LEFT_BOTTOM_CORNER:
+            next_x += corner_tile_offset
+            next_y -= corner_tile_offset
+        elif next_tile_type == TileType.RIGHT_BOTTOM_CORNER:
+            next_x -= corner_tile_offset
+            next_y -= corner_tile_offset
 
-            angle_to_waypoint = me.get_angle_to(next_x, next_y)
-            speed_module = hypot(me.speed_x, me.speed_y)
-            if speed_module > TURN_SPEED and next_tile_type in TURN_TILES:
-                move.brake = True
+        move.wheel_turn = self.get_wheel_turn_to_waypoint(me, next_x, next_y)
+        speed_module = hypot(me.speed_x, me.speed_y)
+        if speed_module > TURN_SPEED and next_tile_type in TURN_TILES:
+            move.brake = True
 
-            move.engine_power = 1.0
-            move.wheel_turn = angle_to_waypoint * 32.0 / pi
+        move.engine_power = 1.0
+
 
         # print(me.x, me.y)
         # print(me.next_waypoint_x, me.next_waypoint_y)
