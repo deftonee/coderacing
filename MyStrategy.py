@@ -14,7 +14,6 @@ TURN_SPEED = 10
 SMALL_SPEED = 0.1
 MEDIUM_SPEED = 4
 
-
 NEXT_TILE_OFFSET = 0.5
 
 DEFAULT_ST = 0
@@ -54,13 +53,13 @@ class MyStrategy:
     grid_width = 0
     grid_height = 0
     state = ACCELERATION_ST
-    _visited_tiles = []
+    _visited_tiles = set()
 
     def steps_to_point(self, ux, uy, px, py):
-        # print('  ', ux, uy, self.grid[ux][uy])
+
         if ux == px and uy == py:
             return []
-        self._visited_tiles.append((ux, uy))
+        self._visited_tiles.add((ux, uy))
         neighbours = [(0, 0), (0, 0), (0, 0), (0, 0)]
         lx = px - ux
         ly = py - uy
@@ -70,8 +69,8 @@ class MyStrategy:
         else:
             neighbours[0], neighbours[3] = (UP, DOWN) if ly < 0 else (DOWN, UP)
             neighbours[1], neighbours[2] = (LEFT, RIGHT) if lx < 0 else (RIGHT, LEFT)
+        paths = []
         for neighbour in neighbours:
-            # print('--', neighbour[0], neighbour[1])
             x = ux + neighbour[0]
             y = uy + neighbour[1]
             if (x, y) in self._visited_tiles:
@@ -82,12 +81,20 @@ class MyStrategy:
                     self.grid[x][y] == TileType.EMPTY:
                 continue
             if self.grid[x][y] == TileType.UNKNOWN:
-                return []
+                paths.append([])
+                continue
             path = self.steps_to_point(x, y, px, py)
             if isinstance(path, list):
-                return [(x, y)] + path
-        self._visited_tiles.pop()
-        return None
+                paths.append([(x, y)] + path)
+                continue
+
+        if (ux, uy) in self._visited_tiles:
+            self._visited_tiles.remove((ux, uy))
+
+        if len(paths) == 0:
+            return None
+        else:
+            return sorted(paths, key=lambda el: len(el))[0]
 
     @staticmethod
     def move_forward_and_return(move):
@@ -134,7 +141,6 @@ class MyStrategy:
             else:
                 self.ticks_without_move = 0
             if self.ticks_without_move > TICKS_WITHOUT_MOVE.get(self.state):
-                # print(self.state, curr_speed_module)
                 self.ticks_without_move = 0
                 self.state = REVERSE_ST
                 self.rear_move_ticks_remain = MAX_REAR_MOVE_TICKS
@@ -142,15 +148,13 @@ class MyStrategy:
             if self.state == ACCELERATION_ST:
                 if abs(curr_speed_module) >= SMALL_SPEED:
                     self.state = DEFAULT_ST
-                    # self.ticks_without_move = 0
+
 
             # print(curr_tile_x, curr_tile_y)
             # print(next_tile_x, next_tile_y, next_tile_type)
             # print(me.next_waypoint_x, me.next_waypoint_y, next_tile_type)
             # print(self.grid_width, self.grid_height)
             # print(steps)
-
-
             # print(me.speed_x, me.speed_y)
             # print(me.x, me.y)
             # print(cars_is_close)
@@ -197,6 +201,7 @@ class MyStrategy:
 
             angle_to_waypoint = me.get_angle_to(next_x, next_y)
             move.wheel_turn = angle_to_waypoint * 32.0 / pi
+            # print(move.wheel_turn)
 
             if curr_speed_module ** 2 * abs(angle_to_waypoint) > 3 ** 2 * pi:
                 move.brake = True
@@ -219,4 +224,3 @@ class MyStrategy:
                     return
                 else:
                     self.state = ACCELERATION_ST
-
