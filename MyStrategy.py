@@ -59,7 +59,6 @@ class MyStrategy:
     def steps_to_point(self, ux, uy, px, py):
         # print('  ', ux, uy, self.grid[ux][uy])
         if ux == px and uy == py:
-            self._visited_tiles.clear()
             return []
         self._visited_tiles.append((ux, uy))
         neighbours = [(0, 0), (0, 0), (0, 0), (0, 0)]
@@ -76,18 +75,18 @@ class MyStrategy:
             x = ux + neighbour[0]
             y = uy + neighbour[1]
             if (x, y) in self._visited_tiles:
-                return None
+                continue
             if neighbour in DEAD_ENDS.get(self.grid[ux][uy], ()):
                 continue
             if not (0 <= x < self.grid_width and 0 <= y < self.grid_height) or \
                     self.grid[x][y] == TileType.EMPTY:
                 continue
             if self.grid[x][y] == TileType.UNKNOWN:
-                self._visited_tiles.clear()
                 return []
             path = self.steps_to_point(x, y, px, py)
             if isinstance(path, list):
                 return [(x, y)] + path
+        self._visited_tiles.pop()
         return None
 
     @staticmethod
@@ -116,6 +115,7 @@ class MyStrategy:
         # print(me.next_waypoint_x, me.next_waypoint_y)
 
         # путь до следующего way point
+        self._visited_tiles.clear()
         steps = self.steps_to_point(curr_tile_x, curr_tile_y, me.next_waypoint_x, me.next_waypoint_y)
         if not steps:
             return self.move_forward_and_return(move)
@@ -134,7 +134,7 @@ class MyStrategy:
             else:
                 self.ticks_without_move = 0
             if self.ticks_without_move > TICKS_WITHOUT_MOVE.get(self.state):
-                print(self.state, curr_speed_module)
+                # print(self.state, curr_speed_module)
                 self.ticks_without_move = 0
                 self.state = REVERSE_ST
                 self.rear_move_ticks_remain = MAX_REAR_MOVE_TICKS
@@ -148,6 +148,8 @@ class MyStrategy:
             # print(next_tile_x, next_tile_y, next_tile_type)
             # print(me.next_waypoint_x, me.next_waypoint_y, next_tile_type)
             # print(self.grid_width, self.grid_height)
+            # print(steps)
+
 
             # print(me.speed_x, me.speed_y)
             # print(me.x, me.y)
@@ -196,8 +198,6 @@ class MyStrategy:
             angle_to_waypoint = me.get_angle_to(next_x, next_y)
             move.wheel_turn = angle_to_waypoint * 32.0 / pi
 
-            # if curr_speed_module > TURN_SPEED and next_tile_type in TURN_TILES:
-            #     move.brake = True
             if curr_speed_module ** 2 * abs(angle_to_waypoint) > 3 ** 2 * pi:
                 move.brake = True
 
