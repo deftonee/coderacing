@@ -48,6 +48,10 @@ DEAD_ENDS = {
     TileType.BOTTOM_HEADED_T: (UP, ),
 }
 
+FORWARD = 0
+CLOCKWISE = 2
+COUNTER_CLOCKWISE = 1
+
 
 class MyStrategy:
     rear_move_ticks_remain = 0
@@ -57,6 +61,7 @@ class MyStrategy:
     grid_height = 0
     state = ACCELERATION_ST
     _visited_tiles = set()
+    pts = set()
 
     def steps_to_point(self, ux, uy, px, py):
 
@@ -126,12 +131,14 @@ class MyStrategy:
         curr_tile_type = world.tiles_x_y[curr_tile_x][curr_tile_y]
         curr_speed_module = hypot(me.speed_x, me.speed_y)
 
-        # print('----------', world.tick)
-        # print(self.ticks_without_move, self.rear_move_ticks_remain)
-        # if world.tick == 0:
-        #     for j in range(self.grid_height):
-        #         print(', '.join([str(self.grid[i][j]).rjust(2, '0') for i in range(self.grid_width)]))
+        print('----------', world.tick)
+        if world.tick == 0:
+            for j in range(self.grid_height):
+                print(', '.join([str(self.grid[i][j]).rjust(2, '0') for i in range(self.grid_width)]))
+        self.pts.add((me.next_waypoint_x, me.next_waypoint_y))
+        print(self.pts)
         # print(me.next_waypoint_x, me.next_waypoint_y)
+        # print(self.ticks_without_move, self.rear_move_ticks_remain)
 
         # путь до следующего way point
         self._visited_tiles.clear()
@@ -139,13 +146,22 @@ class MyStrategy:
         if not steps:
             return self.move_forward_and_return(move)
         else:
-            next_tile_x, next_tile_y = steps.pop(0)
+            next_tile_x, next_tile_y = steps[0]
         next_tile_type = world.tiles_x_y[next_tile_x][next_tile_y]
 
         if self.state == DEFAULT_ST or self.state == ACCELERATION_ST:
             # до начала движения
             if world.tick < game.initial_freeze_duration_ticks:
                 return self.move_forward_and_return(move)
+
+            # анализируем дорогу впереди
+            # dx = steps[]
+
+            # используем инвентарь
+            if self.check_other_cars(world, me, PROJECTILE_THROW_DISTANCE, 0):
+                move.throw_projectile = True
+            if self.check_other_cars(world, me, OIL_SPILL_DISTANCE, pi):
+                move.spill_oil = True
 
             # счётчик простоя перед задним ходом
             if abs(curr_speed_module) < SMALL_SPEED:
@@ -161,10 +177,6 @@ class MyStrategy:
                 if abs(curr_speed_module) >= SMALL_SPEED:
                     self.state = DEFAULT_ST
 
-            if self.check_other_cars(world, me, PROJECTILE_THROW_DISTANCE, 0):
-                move.throw_projectile = True
-            if self.check_other_cars(world, me, OIL_SPILL_DISTANCE, pi):
-                move.spill_oil = True
             # print(curr_tile_x, curr_tile_y)
             # print(next_tile_x, next_tile_y, next_tile_type)
             # print(me.next_waypoint_x, me.next_waypoint_y, next_tile_type)
@@ -219,7 +231,7 @@ class MyStrategy:
             move.wheel_turn = angle_to_waypoint * 32.0 / pi
 
             if curr_speed_module ** 2 * abs(angle_to_waypoint) > 3 ** 2 * pi:
-                move.engine_power = .8
+                move.engine_power = 0.8
                 move.brake = True
             else:
                 move.engine_power = 1.0
