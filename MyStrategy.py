@@ -11,11 +11,11 @@ TURN_TILES = (TileType.LEFT_TOP_CORNER, TileType.RIGHT_TOP_CORNER, TileType.LEFT
               TileType.TOP_HEADED_T, TileType.BOTTOM_HEADED_T)
 
 TURN_SPEED = 10
-SMALL_SPEED = 0.1
-MEDIUM_SPEED = 4
+SMALL_SPEED = 0.2
+BIG_SPEED = 26
 
 NEXT_TILE_OFFSET = 0.5
-ANGLE_DELTA = pi / 16
+ANGLE_DELTA = pi / 20
 PROJECTILE_THROW_DISTANCE = 2000
 OIL_SPILL_DISTANCE = 2000
 
@@ -27,8 +27,9 @@ TICKS_WITHOUT_MOVE = {
     DEFAULT_ST: 10,
     ACCELERATION_ST: 100
 }
-MAX_REAR_MOVE_TICKS = 100
-MAX_REAR_TICKS_TO_STOP = 20
+MAX_REAR_MOVE_TICKS = 140
+
+RECURSION_DEPTH = 50
 
 LEFT = (-1, 0)
 RIGHT = (1, 0)
@@ -48,10 +49,6 @@ DEAD_ENDS = {
     TileType.BOTTOM_HEADED_T: (UP, ),
 }
 
-FORWARD = 0
-CLOCKWISE = 2
-COUNTER_CLOCKWISE = 1
-
 
 class MyStrategy:
     rear_move_ticks_remain = 0
@@ -61,11 +58,12 @@ class MyStrategy:
     grid_height = 0
     state = ACCELERATION_ST
     _visited_tiles = set()
-    pts = set()
+
+    tmp_route = []
+    route = []
 
     def steps_to_point(self, ux, uy, px, py):
-
-        if ux == px and uy == py:
+        if ux == px and uy == py or len(self._visited_tiles) > RECURSION_DEPTH:
             return []
         self._visited_tiles.add((ux, uy))
         neighbours = [(0, 0), (0, 0), (0, 0), (0, 0)]
@@ -131,37 +129,48 @@ class MyStrategy:
         curr_tile_type = world.tiles_x_y[curr_tile_x][curr_tile_y]
         curr_speed_module = hypot(me.speed_x, me.speed_y)
 
-        print('----------', world.tick)
-        if world.tick == 0:
-            for j in range(self.grid_height):
-                print(', '.join([str(self.grid[i][j]).rjust(2, '0') for i in range(self.grid_width)]))
-        self.pts.add((me.next_waypoint_x, me.next_waypoint_y))
-        print(self.pts)
+        # print('----------', world.tick)
+        # if world.tick == 0:
+        #     for j in range(self.grid_height):
+        #         print(', '.join([str(self.grid[i][j]).rjust(2, '0') for i in range(self.grid_width)]))
+        # print(self.pts)
         # print(me.next_waypoint_x, me.next_waypoint_y)
         # print(self.ticks_without_move, self.rear_move_ticks_remain)
 
         # путь до следующего way point
-        self._visited_tiles.clear()
-        steps = self.steps_to_point(curr_tile_x, curr_tile_y, me.next_waypoint_x, me.next_waypoint_y)
-        if not steps:
-            return self.move_forward_and_return(move)
+        if self.route:
+            steps = self.route[len(self.tmp_route):]
         else:
+            if len(self.tmp_route) > 1 and self.tmp_route[0] == (curr_tile_x, curr_tile_y):
+                self.route = list(self.tmp_route)
+                self.tmp_route.clear()
+
+            self._visited_tiles.clear()
+            steps = self.steps_to_point(curr_tile_x, curr_tile_y, me.next_waypoint_x, me.next_waypoint_y)
+
+        if not self.tmp_route or self.tmp_route[-1] != (curr_tile_x, curr_tile_y):
+            self.tmp_route.append((curr_tile_x, curr_tile_y))
+        straight_moves = 1
+        if steps:
             next_tile_x, next_tile_y = steps[0]
+
+            direction = (next_tile_x - curr_tile_x, next_tile_y - curr_tile_y)
+            for i in range(1, len(steps)):
+                if direction == (steps[i][0] - steps[i-1][0], steps[i][1] - steps[i-1][1]):
+                    straight_moves += 1
+                    next_tile_x, next_tile_y = steps[i]
+                else:
+                    break
+        else:
+            next_tile_x, next_tile_y = me.next_waypoint_x, me.next_waypoint_y
+
         next_tile_type = world.tiles_x_y[next_tile_x][next_tile_y]
+        # print(straight_moves)
 
         if self.state == DEFAULT_ST or self.state == ACCELERATION_ST:
             # до начала движения
             if world.tick < game.initial_freeze_duration_ticks:
                 return self.move_forward_and_return(move)
-
-            # анализируем дорогу впереди
-            # dx = steps[]
-
-            # используем инвентарь
-            if self.check_other_cars(world, me, PROJECTILE_THROW_DISTANCE, 0):
-                move.throw_projectile = True
-            if self.check_other_cars(world, me, OIL_SPILL_DISTANCE, pi):
-                move.spill_oil = True
 
             # счётчик простоя перед задним ходом
             if abs(curr_speed_module) < SMALL_SPEED:
@@ -185,35 +194,34 @@ class MyStrategy:
             # print(me.speed_x, me.speed_y)
             # print(me.x, me.y)
             # print(cars_is_close)
+            # print(curr_speed_module)
+            # print(curr_speed_module > BIG_SPEED and straight_moves == 1)
 
-            # move.engine_power = .8
-            # move.use_nitro = True
-
-            # FIXME есть ли машины рядом
-            cars_is_close = False
-            for car in world.cars:
-                if car.id != me.id and me.get_distance_to_unit(car) <= me.width * 1.2:
-                    cars_is_close = True
-
-            if cars_is_close and any((
-                all((
-                    next_tile_type == TileType.VERTICAL,
-                    abs(me.speed_x) < SMALL_SPEED,
-                    # abs(me.speed_y) > MEDIUM_SPEED,
-                )),
-                all((
-                    next_tile_type == TileType.HORIZONTAL,
-                    abs(me.speed_y) < SMALL_SPEED,
-                    # abs(me.speed_x) > MEDIUM_SPEED,
-                ))
-            )):
-                return self.move_forward_and_return(move)
-            # FIXME ends
+            # # FIXME есть ли машины рядом
+            # cars_is_close = False
+            # for car in world.cars:
+            #     if car.id != me.id and me.get_distance_to_unit(car) <= me.width * 1.2:
+            #         cars_is_close = True
+            #
+            # if cars_is_close and any((
+            #     all((
+            #         next_tile_type == TileType.VERTICAL,
+            #         abs(me.speed_x) < SMALL_SPEED,
+            #         # abs(me.speed_y) > MEDIUM_SPEED,
+            #     )),
+            #     all((
+            #         next_tile_type == TileType.HORIZONTAL,
+            #         abs(me.speed_y) < SMALL_SPEED,
+            #         # abs(me.speed_x) > MEDIUM_SPEED,
+            #     ))
+            # )):
+            #     return self.move_forward_and_return(move)
+            # # FIXME ends
 
             next_x = (next_tile_x + NEXT_TILE_OFFSET) * game.track_tile_size
             next_y = (next_tile_y + NEXT_TILE_OFFSET) * game.track_tile_size
 
-            corner_tile_offset = 0.25 * game.track_tile_size
+            corner_tile_offset = 0.32 * game.track_tile_size
             if next_tile_type == TileType.LEFT_TOP_CORNER:
                 next_x += corner_tile_offset
                 next_y += corner_tile_offset
@@ -226,15 +234,32 @@ class MyStrategy:
             elif next_tile_type == TileType.RIGHT_BOTTOM_CORNER:
                 next_x -= corner_tile_offset
                 next_y -= corner_tile_offset
+            elif next_tile_type == TileType.BOTTOM_HEADED_T and straight_moves == 1:
+                next_y += corner_tile_offset
+            elif next_tile_type == TileType.LEFT_HEADED_T and straight_moves == 1:
+                next_x -= corner_tile_offset
+            elif next_tile_type == TileType.RIGHT_HEADED_T and straight_moves == 1:
+                next_x += corner_tile_offset
+            elif next_tile_type == TileType.TOP_HEADED_T and straight_moves == 1:
+                next_y -= corner_tile_offset
 
-            angle_to_waypoint = me.get_angle_to(next_x, next_y)
-            move.wheel_turn = angle_to_waypoint * 32.0 / pi
+            angle_to_next_tile = me.get_angle_to(next_x, next_y)
+            move.wheel_turn = angle_to_next_tile * 32.0 / pi
 
-            if curr_speed_module ** 2 * abs(angle_to_waypoint) > 3 ** 2 * pi:
-                move.engine_power = 0.8
+            if curr_speed_module ** 2 * abs(angle_to_next_tile) > 3 ** 2 * pi or \
+                    curr_speed_module > BIG_SPEED and straight_moves == 1:
+                move.engine_power = 0.7
                 move.brake = True
             else:
                 move.engine_power = 1.0
+
+            # используем инвентарь
+            if self.check_other_cars(world, me, PROJECTILE_THROW_DISTANCE, 0):
+                move.throw_projectile = True
+            if self.check_other_cars(world, me, OIL_SPILL_DISTANCE, pi) and curr_tile_type in TURN_TILES:
+                move.spill_oil = True
+            if straight_moves > 3 and angle_to_next_tile < ANGLE_DELTA:
+                move.use_nitro = True
 
         # задний ход
         elif self.state == REVERSE_ST:
