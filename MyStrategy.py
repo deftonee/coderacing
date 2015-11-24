@@ -15,6 +15,9 @@ SMALL_SPEED = 0.1
 MEDIUM_SPEED = 4
 
 NEXT_TILE_OFFSET = 0.5
+ANGLE_DELTA = pi / 16
+PROJECTILE_THROW_DISTANCE = 2000
+OIL_SPILL_DISTANCE = 2000
 
 DEFAULT_ST = 0
 ACCELERATION_ST = 1
@@ -97,6 +100,15 @@ class MyStrategy:
             return sorted(paths, key=lambda el: len(el))[0]
 
     @staticmethod
+    def check_other_cars(_world, _me, _distance, _angle):
+        for car in _world.cars:
+            if car.id != _me.id and \
+                    _me.get_distance_to_unit(car) <= _distance and \
+                    _angle - ANGLE_DELTA < abs(_me.get_angle_to_unit(car)) < _angle + ANGLE_DELTA:
+                return True
+        return False
+
+    @staticmethod
     def move_forward_and_return(move):
         move.engine_power = 1.0
         return
@@ -149,7 +161,10 @@ class MyStrategy:
                 if abs(curr_speed_module) >= SMALL_SPEED:
                     self.state = DEFAULT_ST
 
-
+            if self.check_other_cars(world, me, PROJECTILE_THROW_DISTANCE, 0):
+                move.throw_projectile = True
+            if self.check_other_cars(world, me, OIL_SPILL_DISTANCE, pi):
+                move.spill_oil = True
             # print(curr_tile_x, curr_tile_y)
             # print(next_tile_x, next_tile_y, next_tile_type)
             # print(me.next_waypoint_x, me.next_waypoint_y, next_tile_type)
@@ -162,7 +177,7 @@ class MyStrategy:
             # move.engine_power = .8
             # move.use_nitro = True
 
-            # есть ли машины рядом
+            # FIXME есть ли машины рядом
             cars_is_close = False
             for car in world.cars:
                 if car.id != me.id and me.get_distance_to_unit(car) <= me.width * 1.2:
@@ -181,6 +196,7 @@ class MyStrategy:
                 ))
             )):
                 return self.move_forward_and_return(move)
+            # FIXME ends
 
             next_x = (next_tile_x + NEXT_TILE_OFFSET) * game.track_tile_size
             next_y = (next_tile_y + NEXT_TILE_OFFSET) * game.track_tile_size
@@ -201,12 +217,12 @@ class MyStrategy:
 
             angle_to_waypoint = me.get_angle_to(next_x, next_y)
             move.wheel_turn = angle_to_waypoint * 32.0 / pi
-            # print(move.wheel_turn)
 
             if curr_speed_module ** 2 * abs(angle_to_waypoint) > 3 ** 2 * pi:
+                move.engine_power = .8
                 move.brake = True
-
-            move.engine_power = 1.0
+            else:
+                move.engine_power = 1.0
 
         # задний ход
         elif self.state == REVERSE_ST:
