@@ -27,9 +27,9 @@ TICKS_WITHOUT_MOVE = {
     DEFAULT_ST: 10,
     ACCELERATION_ST: 100
 }
-MAX_REAR_MOVE_TICKS = 140
+MAX_REAR_MOVE_TICKS = 110
 
-RECURSION_DEPTH = 50
+RECURSION_DEPTH = 10
 
 LEFT = (-1, 0)
 RIGHT = (1, 0)
@@ -57,15 +57,15 @@ class MyStrategy:
     grid_width = 0
     grid_height = 0
     state = ACCELERATION_ST
-    _visited_tiles = set()
 
     tmp_route = []
     route = []
 
-    def steps_to_point(self, ux, uy, px, py):
-        if ux == px and uy == py or len(self._visited_tiles) > RECURSION_DEPTH:
+    def steps_to_point(self, ux, uy, px, py, _visited_tiles=set()):
+        # print(len(_visited_tiles))
+        if ux == px and uy == py or len(_visited_tiles) > RECURSION_DEPTH:
+            # print('++++++++++++++++++++++++++++++++++++')
             return []
-        self._visited_tiles.add((ux, uy))
         neighbours = [(0, 0), (0, 0), (0, 0), (0, 0)]
         lx = px - ux
         ly = py - uy
@@ -79,7 +79,7 @@ class MyStrategy:
         for neighbour in neighbours:
             x = ux + neighbour[0]
             y = uy + neighbour[1]
-            if (x, y) in self._visited_tiles:
+            if (x, y) in _visited_tiles:
                 continue
             if neighbour in DEAD_ENDS.get(self.grid[ux][uy], ()):
                 continue
@@ -89,18 +89,22 @@ class MyStrategy:
             if self.grid[x][y] == TileType.UNKNOWN:
                 paths.append([])
                 continue
-            path = self.steps_to_point(x, y, px, py)
+            path = self.steps_to_point(x, y, px, py, _visited_tiles | {(ux, uy)})
             if isinstance(path, list):
                 paths.append([(x, y)] + path)
-                continue
-
-        if (ux, uy) in self._visited_tiles:
-            self._visited_tiles.remove((ux, uy))
 
         if len(paths) == 0:
             return None
+        elif len(paths) == 1:
+            return paths[0]
         else:
-            return sorted(paths, key=lambda el: len(el))[0]
+            path = min(paths, key=lambda el: len(el))
+            # paths = filter(lambda el: len(el) == len(path), paths)
+            paths = [el for el in paths if len(el) == len(path)]
+            if len(paths) == 1:
+                return paths[0]
+            else:
+                return min(paths, key=lambda el: hypot(px-el[-1][0], py-el[-1][1]))
 
     @staticmethod
     def check_other_cars(_world, _me, _distance, _angle):
@@ -129,7 +133,7 @@ class MyStrategy:
         curr_tile_type = world.tiles_x_y[curr_tile_x][curr_tile_y]
         curr_speed_module = hypot(me.speed_x, me.speed_y)
 
-        # print('----------', world.tick)
+        print('----------', world.tick)
         # if world.tick == 0:
         #     for j in range(self.grid_height):
         #         print(', '.join([str(self.grid[i][j]).rjust(2, '0') for i in range(self.grid_width)]))
@@ -138,18 +142,18 @@ class MyStrategy:
         # print(self.ticks_without_move, self.rear_move_ticks_remain)
 
         # путь до следующего way point
-        if self.route:
-            steps = self.route[len(self.tmp_route):]
-        else:
-            if len(self.tmp_route) > 1 and self.tmp_route[0] == (curr_tile_x, curr_tile_y):
-                self.route = list(self.tmp_route)
-                self.tmp_route.clear()
+        # if self.route:
+        #     steps = self.route[len(self.tmp_route):]
+        # else:
+        #     if len(self.tmp_route) > 1 and self.tmp_route[0] == (curr_tile_x, curr_tile_y):
+        #         self.route = list(self.tmp_route)
+        #         self.tmp_route.clear()
 
-            self._visited_tiles.clear()
-            steps = self.steps_to_point(curr_tile_x, curr_tile_y, me.next_waypoint_x, me.next_waypoint_y)
+        steps = self.steps_to_point(curr_tile_x, curr_tile_y, me.next_waypoint_x, me.next_waypoint_y)
 
-        if not self.tmp_route or self.tmp_route[-1] != (curr_tile_x, curr_tile_y):
-            self.tmp_route.append((curr_tile_x, curr_tile_y))
+        # if not self.tmp_route or self.tmp_route[-1] != (curr_tile_x, curr_tile_y):
+        #     self.tmp_route.append((curr_tile_x, curr_tile_y))
+        # print(steps, len(steps))
         straight_moves = 1
         if steps:
             next_tile_x, next_tile_y = steps[0]
